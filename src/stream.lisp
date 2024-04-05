@@ -151,7 +151,7 @@
   (define (drop-while p? s)
     (delay-force
      (match (force s)
-       ((None) null )
+       ((None) null)
        ((Some (Tuple h t))
         (if (p? h)
             (drop-while p? t)
