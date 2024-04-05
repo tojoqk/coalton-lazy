@@ -10,11 +10,20 @@
            #:concat)
   (:local-nicknames
    (#:promise #:tokyo.tojo.lazy/promise))
-  (:export #:make
+  (:export #:cons
+           #:make
+           #:force
+           #:delay-force
+           #:null
+           #:append
+           #:concat
+           #:concat-map
            #:zip-with
            #:naturals-from
            #:take
-           #:repeat))
+           #:repeat
+           #:drop-while
+           #:filter))
 
 (in-package #:tokyo.tojo.lazy/stream)
 
