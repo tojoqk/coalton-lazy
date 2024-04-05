@@ -19,7 +19,6 @@
            #:concat
            #:concat-map
            #:zip-with
-           #:naturals-from
            #:take
            #:repeat
            #:drop-while
