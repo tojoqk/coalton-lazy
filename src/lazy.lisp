@@ -46,10 +46,11 @@
 
   (define-instance (Alternative (Lazy Optional))
     (define (alt (Lazy p1) (Lazy p2))
-      (Lazy
-       (match (promise:force p1)
-         ((Some _) p1)
-         ((None) p2))))
+      (delay-force
+       (Lazy
+        (match (promise:force p1)
+          ((Some _) p1)
+          ((None) p2)))))
     (define empty (delay None)))
 
   (define-instance (Applicative (Lazy (Result :e)))
