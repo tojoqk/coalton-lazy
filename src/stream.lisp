@@ -10,7 +10,8 @@
            #:concat)
   (:local-nicknames
    (#:promise #:tokyo.tojo.lazy/promise))
-  (:export #:cons
+  (:export #:Stream
+           #:cons
            #:make
            #:force
            #:delay-force
