@@ -30,7 +30,7 @@
 (named-readtables:in-readtable coalton:coalton)
 
 (cl:defmacro cons (h t)
-  `(Stream (promise:delay (%Cons ,h ,t))))
+  `(%Stream (promise:delay (Some (Tuple ,h ,t)))))
 
 (cl:defmacro make (cl:&rest xs)
   (cl:if (cl:consp xs)
@@ -39,14 +39,14 @@
          'null))
 
 (cl:defmacro delay-force (s)
-  `(Stream (promise:delay-force (stream-promise ,s))))
+  `(%Stream (promise:delay-force (stream-promise ,s))))
 
 (coalton-toplevel
   (repr :transparent)
   (define-type (Stream :a)
-    (Stream (promise:Promise (%Stream :a))))
+    (%Stream (promise:Promise (Optional (Tuple :a (Stream :a))))))
 
-  (define (stream-promise (Stream p)) p)
+  (define (stream-promise (%Stream p)) p)
 
   (define-type (%Stream :a)
     (%Nil)
@@ -54,13 +54,11 @@
 
   (declare null (Stream :a))
   (define null
-    (Stream (promise:delay %Nil)))
+    (%Stream (promise:delay None)))
 
   (declare force (Stream :a -> Optional (Tuple :a (Stream :a))))
-  (define (force (Stream p))
-    (match (promise:force p)
-      ((%Cons h t) (Some (Tuple h t)))
-      ((%Nil) None)))
+  (define (force (%Stream p))
+    (promise:force p))
 
   (define-instance (Functor Stream)
     (define (map f x)
