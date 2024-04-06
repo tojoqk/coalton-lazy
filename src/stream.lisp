@@ -13,7 +13,9 @@
            #:length
            #:concat)
   (:local-nicknames
-   (#:promise #:tokyo.tojo.lazy/promise))
+   (#:promise #:tokyo.tojo.lazy/promise)
+   (#:iter #:coalton-library/iterator)
+   (#:cell #:coalton-library/cell))
   (:export #:Stream
            #:cons
            #:make
@@ -253,4 +255,18 @@
       (match (force s)
         ((Some (Tuple h t))
          (liftA2 (fn (x y) (cons x y)) (f h) (traverse f t)))
-        ((None) (pure null))))))
+        ((None) (pure null)))))
+
+  (define-instance (iter:IntoIterator (Stream :a) :a)
+    (define (iter:into-iter s)
+      (let cell = (cell:new s))
+      (iter:new (fn ((Unit))
+                  (match (force (cell:read cell))
+                    ((None) None)
+                    ((Some (Tuple h t))
+                     (cell:write! cell t)
+                     (Some h)))))))
+
+  (define-instance (iter:FromIterator (Stream :a) :a)
+    (define (iter:collect! iter)
+      (into (the (List :a) (iter:collect! iter))))))
