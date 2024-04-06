@@ -257,6 +257,12 @@
          (liftA2 (fn (x y) (cons x y)) (f h) (traverse f t)))
         ((None) (pure null)))))
 
+  (define-instance (Semigroup (Stream :a))
+    (define (<> s1 s2) (append s1 s2)))
+
+  (define-instance (Monoid (Stream :a))
+    (define mempty null))
+
   (define-instance (iter:IntoIterator (Stream :a) :a)
     (define (iter:into-iter s)
       (let cell = (cell:new s))
