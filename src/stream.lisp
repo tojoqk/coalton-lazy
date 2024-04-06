@@ -199,20 +199,6 @@
            ((None) True)
            (_ False))))))
 
-  (define-instance (Eq :a => Eq (Stream :a))
-    (define (== s1 s2)
-      (match (force s1)
-        ((Some (Tuple h1 t1))
-         (match (force s2)
-           ((Some (Tuple h2 t2))
-            (and (== h1 h2)
-                 (== t1 t2)))
-           (_ False)))
-        ((None)
-         (match (force s2)
-           ((None) True)
-           (_ False))))))
-
   (define-instance (Functor Stream)
     (define (map f x)
       (delay-force
