@@ -6,7 +6,9 @@
    (#:promise #:tokyo.tojo.lazy/promise))
   (:export #:Lazy
            #:delay
-           #:force))
+           #:force
+           #:promise
+           #:delay-force))
 
 (in-package #:tokyo.tojo.lazy/lazy)
 
@@ -16,19 +18,19 @@
   `(Lazy (promise:delay ,x)))
 
 (cl:defmacro delay-force (x)
-  `(Lazy (promise:delay-force (lazy-promise ,x))))
+  `(Lazy (promise:delay-force (promise ,x))))
 
 (coalton-toplevel
   (repr :transparent)
   (define-type (Lazy :m :a)
     (Lazy (promise:Promise (:m :a))))
 
-  (define (lazy-promise (Lazy p)) p)
+  (define (promise (Lazy p)) p)
 
   (define (force (Lazy p))
     (promise:force p))
 
-  (define-instance (Functor :f => Functor (Lazy :f))
+  (define-instance (Functor (Lazy Optional))
     (define (map f (Lazy p))
       (delay (map f (promise:force p)))))
 
@@ -52,6 +54,10 @@
           ((Some _) p1)
           ((None) p2)))))
     (define empty (delay None)))
+
+  (define-instance (Functor (Lazy (Result :e)))
+    (define (map f (Lazy p))
+      (delay (map f (promise:force p)))))
 
   (define-instance (Applicative (Lazy (Result :e)))
     (define (pure x)
