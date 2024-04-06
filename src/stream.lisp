@@ -201,6 +201,22 @@
            ((None) True)
            (_ False))))))
 
+  (define-instance (Ord :a => Ord (Stream :a))
+    (define (<=> s1 s2)
+      (match (force s1)
+        ((Some (Tuple h1 t1))
+         (match (force s2)
+           ((Some (Tuple h2 t2))
+            (match (<=> h1 h2)
+              ((LT) LT)
+              ((GT) GT)
+              ((EQ) (<=> t1 t2))))
+           (_ GT)))
+        ((None)
+         (match (force s2)
+           ((None) EQ)
+           (_ LT))))))
+
   (define-instance (Functor Stream)
     (define (map f x)
       (delay-force
