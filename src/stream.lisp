@@ -246,4 +246,11 @@
       (match lst
         ((Nil) null)
         ((coalton:Cons h t)
-         (cons h (into t)))))))
+         (cons h (into t))))))
+
+  (define-instance (Traversable Stream)
+    (define (traverse f s)
+      (match (force s)
+        ((Some (Tuple h t))
+         (liftA2 (fn (x y) (cons x y)) (f h) (traverse f t)))
+        ((None) (pure null))))))
