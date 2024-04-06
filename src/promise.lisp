@@ -51,6 +51,14 @@
             (cell:write! next-outer-cell current-inner-cell))))))
     (error "promsie:force: error"))
 
+  (define-instance (Eq :a => Eq (Promise :a))
+    (define (== x y)
+      (== (force x) (force y))))
+
+  (define-instance (Ord :a => Ord (Promise :a))
+    (define (<=> x y)
+      (<=> (force x) (force y))))
+
   (define-instance (Functor Promise)
     (define (map f p)
       (delay (f (force p)))))
