@@ -1,7 +1,8 @@
 (defpackage #:tokyo.tojo.lazy/stream
   (:use #:coalton
         #:coalton-prelude)
-  (:shadow #:cons
+  (:shadow #:Cons
+           #:Nil
            #:append
            #:take
            #:drop
@@ -15,13 +16,14 @@
   (:local-nicknames
    (#:promise #:tokyo.tojo.lazy/promise)
    (#:iter #:coalton-library/iterator)
-   (#:cell #:coalton-library/cell))
+   (#:cell #:coalton-library/cell)
+   (#:lazy #:tokyo.tojo.lazy/lazy))
   (:export #:Stream
-           #:cons
+           #:Cons
+           #:Nil
            #:make
            #:force
            #:delay-force
-           #:null
            #:head
            #:tail
            #:index
@@ -42,253 +44,238 @@
 
 (named-readtables:in-readtable coalton:coalton)
 
-(cl:defmacro cons (h t)
-  `(%Stream (promise:delay (Some (Tuple ,h ,t)))))
-
 (cl:defmacro make (cl:&rest xs)
   (cl:if (cl:consp xs)
-         `(cons ,(cl:first xs)
-                (make ,@(cl:rest xs)))
-         'null))
-
-(cl:defmacro delay-force (s)
-  `(%Stream (promise:delay-force (stream-promise ,s))))
+         `(lazy:delay (Cons ,(cl:first xs)
+                            (make ,@(cl:rest xs))))
+         '(lazy:delay Nil)))
 
 (coalton-toplevel
-  (repr :transparent)
   (define-type (Stream :a)
-    (%Stream (promise:Promise (Optional (Tuple :a (Stream :a))))))
+    (Cons :a (lazy:Lazy Stream :a))
+    Nil)
 
-  (define (stream-promise (%Stream p)) p)
-
-  (define-type (%Stream :a)
-    (%Nil)
-    (%Cons :a (Stream :a)))
-
-  (declare force (Stream :a -> Optional (Tuple :a (Stream :a))))
-  (define (force (%Stream p))
-    (promise:force p))
-
-  (declare null (Stream :a))
-  (define null
-    (%Stream (promise:delay None)))
-
-  (declare head (Stream :a -> Optional :a))
+  (declare head (lazy:Lazy Stream :a -> Optional :a))
   (define (head s)
-    (match (force s)
-      ((Some (Tuple h _)) (Some h))
-      ((None) None)))
+    (match (lazy:force s)
+      ((Cons h _) (Some h))
+      ((Nil) None)))
 
-  (declare tail (Stream :a -> Optional (Stream :a)))
+  (declare tail (lazy:Lazy Stream :a -> Optional (lazy:Lazy Stream :a)))
   (define (tail s)
-    (match (force s)
-      ((Some (Tuple _ t)) (Some t))
-      ((None) None)))
+    (match (lazy:force s)
+      ((Cons _ t) (Some t))
+      ((Nil) None)))
 
-  (declare index (UFix -> Stream :a -> Optional :a))
+  (declare index (UFix -> lazy:Lazy Stream :a -> Optional :a))
   (define (index idx s)
-    (match (force s)
-      ((Some (Tuple h t))
+    (match (lazy:force s)
+      ((Cons h t)
        (if (== idx 0)
            (Some h)
            (index (1- idx) t)))
-      ((None) None)))
+      ((Nil) None)))
 
-  (declare append (Stream :a -> Stream :a -> Stream :a))
+  (declare append (lazy:Lazy Stream :a -> lazy:Lazy Stream :a -> lazy:Lazy Stream :a))
   (define (append s1 s2)
-    (delay-force
-     (match (force s1)
-       ((None) s2)
-       ((Some (Tuple h t))
-        (cons h (append t s2))))))
+    (lazy:delay-force
+     (match (lazy:force s1)
+       ((Nil) s2)
+       ((Cons h t)
+        (lazy:delay (Cons h (append t s2)))))))
 
-  (declare concat ((Stream (Stream :a)) -> (Stream :a)))
+  (declare concat ((lazy:Lazy Stream (lazy:Lazy Stream :a)) -> (lazy:Lazy Stream :a)))
   (define (concat s)
     (concat-map id s))
 
-  (declare concat-map ((:a -> Stream :b) -> Stream :a -> Stream :b))
+  (declare concat-map ((:a -> lazy:Lazy Stream :b) -> lazy:Lazy Stream :a -> lazy:Lazy Stream :b))
   (define (concat-map f s)
-    (delay-force
-     (match (force s)
-       ((None) null)
-       ((Some (Tuple h t))
+    (lazy:delay-force
+     (match (lazy:force s)
+       ((Nil) (lazy:delay Nil))
+       ((Cons h t)
         (append (f h) (concat-map f t))))))
 
-  (declare take (UFix -> (Stream :a) -> (Stream :a)))
+  (declare take (UFix -> (lazy:Lazy Stream :a) -> (lazy:Lazy Stream :a)))
   (define (take n s)
-    (delay-force
+    (lazy:delay-force
      (if (<= n 0)
-         null
-         (match (force s)
-           ((None) null)
-           ((Some (Tuple h t))
-            (cons h (take (1- n) t)))))))
+         (lazy:delay Nil)
+         (match (lazy:force s)
+           ((Nil) (lazy:delay Nil))
+           ((Cons h t)
+            (lazy:delay (Cons h (take (1- n) t))))))))
 
-  (declare drop (UFix -> (Stream :a) -> (Stream :a)))
+  (declare drop (UFix -> (lazy:Lazy Stream :a) -> (lazy:Lazy Stream :a)))
   (define (drop n s)
-    (delay-force
-     (if (<= n 0)
-         s
-         (match (force s)
-           ((None) null)
-           ((Some (Tuple _h t))
-            (drop (1- n) t))))))
+    (if (<= n 0)
+        s
+        (match (lazy:force s)
+          ((Nil) (lazy:delay Nil))
+          ((Cons _h t)
+           (drop (1- n) t)))))
 
-  (declare take-while ((:a -> Boolean) -> (Stream :a) -> (Stream :a)))
+  (declare take-while ((:a -> Boolean) -> (lazy:Lazy Stream :a) -> (lazy:Lazy Stream :a)))
   (define (take-while p? s)
-    (delay-force
-     (match (force s)
-       ((None) null)
-       ((Some (Tuple h t))
+    (lazy:delay-force
+     (match (lazy:force s)
+       ((Nil) (lazy:delay Nil))
+       ((Cons h t)
         (if (p? h)
-            (cons h (take-while p? t))
-            null)))))
+            (lazy:delay (Cons h (take-while p? t)))
+            (lazy:delay Nil))))))
 
-  (declare drop-while ((:a -> Boolean) -> (Stream :a) -> (Stream :a)))
+  (declare drop-while ((:a -> Boolean) -> lazy:Lazy Stream :a -> lazy:Lazy Stream :a))
   (define (drop-while p? s)
-    (delay-force
-     (match (force s)
-       ((None) null)
-       ((Some (Tuple h t))
+    (lazy:delay-force
+     (match (lazy:force s)
+       ((Nil) (lazy:delay Nil))
+       ((Cons h t)
         (if (p? h)
             (drop-while p? t)
             s)))))
 
-  (declare zip-with ((:a -> :b -> :c) -> (Stream :a) -> (Stream :b) -> (Stream :c)))
+  (declare zip-with ((:a -> :b -> :c)
+                     -> lazy:Lazy Stream :a
+                     -> lazy:Lazy Stream :b
+                     -> lazy:Lazy Stream :c))
   (define (zip-with f s1 s2)
-    (delay-force
-     (match (force s1)
-       ((None) null)
-       ((Some (Tuple h1 t1))
-        (match (force s2)
-          ((None) null)
-          ((Some (Tuple h2 t2))
-           (cons (f h1 h2)
-                 (zip-with f t1 t2))))))))
+    (lazy:delay-force
+     (match (lazy:force s1)
+       ((Nil) (lazy:delay Nil))
+       ((Cons h1 t1)
+        (match (lazy:force s2)
+          ((Nil) (lazy:delay Nil))
+          ((Cons h2 t2)
+           (lazy:delay (Cons (f h1 h2)
+                             (zip-with f t1 t2)))))))))
 
-  (declare iterate ((:a -> :a) -> :a -> (Stream :a)))
+  (declare iterate ((:a -> :a) -> :a -> lazy:Lazy Stream :a))
   (define (iterate f x)
-    (cons x (iterate f (f x))))
+    (lazy:delay (Cons x (iterate f (f x)))))
 
-  (declare repeat (:a -> (Stream :a)))
+  (declare repeat (:a -> lazy:Lazy Stream :a))
   (define repeat (iterate id))
 
-  (declare length (Stream :a -> UFix))
+  (declare length (lazy:Lazy Stream :a -> UFix))
   (define (length s)
     (fold (fn (acc _) (1+ acc)) 0 s))
 
-  (declare filter ((:a -> Boolean) -> (Stream :a) -> (Stream :a)))
+  (declare filter ((:a -> Boolean) -> lazy:Lazy Stream :a -> lazy:Lazy Stream :a))
   (define (filter p? s)
-    (delay-force
-     (match (force s)
-       ((None) null)
-       ((Some (Tuple h t))
+    (lazy:delay-force
+     (match (lazy:force s)
+       ((Nil) (lazy:delay Nil))
+       ((Cons h t)
         (if (p? h)
-            (cons h (filter p? t))
+            (lazy:delay (Cons h (filter p? t)))
             (filter p? t))))))
 
-  (define-instance (Eq :a => Eq (Stream :a))
+  (define-instance (Eq :a => Eq (lazy:Lazy Stream :a))
     (define (== s1 s2)
-      (match (force s1)
-        ((Some (Tuple h1 t1))
-         (match (force s2)
-           ((Some (Tuple h2 t2))
+      (match (lazy:force s1)
+        ((Cons h1 t1)
+         (match (lazy:force s2)
+           ((Cons h2 t2)
             (and (== h1 h2)
-                 (== t1 t2)))
+                 (== (lazy:force t1) (lazy:force t2))))
            (_ False)))
-        ((None)
-         (match (force s2)
-           ((None) True)
+        ((Nil)
+         (match (lazy:force s2)
+           ((Nil) True)
            (_ False))))))
 
-  (define-instance (Ord :a => Ord (Stream :a))
+  (define-instance (Ord :a => Ord (lazy:Lazy Stream :a))
     (define (<=> s1 s2)
-      (match (force s1)
-        ((Some (Tuple h1 t1))
-         (match (force s2)
-           ((Some (Tuple h2 t2))
+      (match (lazy:force s1)
+        ((Cons h1 t1)
+         (match (lazy:force s2)
+           ((Cons h2 t2)
             (match (<=> h1 h2)
               ((LT) LT)
               ((GT) GT)
-              ((EQ) (<=> t1 t2))))
+              ((EQ) (<=> (lazy:force t1)
+                         (lazy:force t2)))))
            (_ GT)))
-        ((None)
-         (match (force s2)
-           ((None) EQ)
+        ((Nil)
+         (match (lazy:force s2)
+           ((Nil) EQ)
            (_ LT))))))
 
-  (define-instance (Functor Stream)
-    (define (map f x)
-      (delay-force
-       (match (force x)
-         ((None) null)
-         ((Some (Tuple h t))
-          (cons (f h) (map f t)))))))
+  (define-instance (Functor (lazy:Lazy Stream))
+    (define (map f s)
+      (match (lazy:force s)
+        ((Nil) (lazy:delay Nil))
+        ((Cons h t)
+         (lazy:delay
+          (Cons (f h) (map f t)))))))
 
-  (define-instance (Applicative Stream)
+  (define-instance (Applicative (lazy:Lazy Stream))
     (define (pure x) (make x))
     (define (liftA2 op s1 s2)
       (concat-map (fn (x) (map (op x) s2))
                   s1)))
 
-  (define-instance (Monad Stream)
+  (define-instance (Monad (lazy:Lazy Stream))
     (define (>>= m f)
       (concat-map f m)))
 
-  (define-instance (Alternative Stream)
+  (define-instance (Alternative (lazy:Lazy Stream))
     (define (alt s1 s2)
       (append s1 s2))
-    (define empty null))
+    (define empty (make)))
 
-  (define-instance (Foldable Stream)
+  (define-instance (Foldable (lazy:Lazy Stream))
     (define (fold f init s)
-      (match (force s)
-        ((None) init)
-        ((Some (Tuple h t))
+      (match (lazy:force s)
+        ((Nil) init)
+        ((Cons h t)
          (fold f (f init h) t))))
     (define (foldr f init s)
-      (match (force s)
-        ((None) init)
-        ((Some (Tuple h t))
+      (match (lazy:force s)
+        ((Nil) init)
+        ((Cons h t)
          (f h (foldr f init t))))))
 
-  (define-instance (Into (Stream :a) (List :a))
+  (define-instance (Into (lazy:Lazy Stream :a) (List :a))
     (define (into s)
-      (match (force s)
-        ((None) Nil)
-        ((Some (Tuple h t))
+      (match (lazy:force s)
+        ((Nil) coalton:Nil)
+        ((Cons h t)
          (coalton:Cons h (into t))))))
 
-  (define-instance (Into (List :a) (Stream :a))
+  (define-instance (Into (List :a) (lazy:Lazy Stream :a))
     (define (into lst)
       (match lst
-        ((Nil) null)
+        ((coalton:Nil) (make))
         ((coalton:Cons h t)
-         (cons h (into t))))))
+         (lazy:delay (Cons h (into t)))))))
 
-  (define-instance (Traversable Stream)
+  (define-instance (Traversable (lazy:Lazy Stream))
     (define (traverse f s)
-      (match (force s)
-        ((Some (Tuple h t))
-         (liftA2 (fn (x y) (cons x y)) (f h) (traverse f t)))
-        ((None) (pure null)))))
+      (match (lazy:force s)
+        ((Cons h t)
+         (liftA2 (fn (x y) (lazy:delay (Cons x y)))
+                 (f h)
+                 (traverse f t)))
+        ((Nil) (pure (make))))))
 
-  (define-instance (Semigroup (Stream :a))
+  (define-instance (Semigroup (lazy:Lazy Stream :a))
     (define (<> s1 s2) (append s1 s2)))
 
-  (define-instance (Monoid (Stream :a))
-    (define mempty null))
+  (define-instance (Monoid (lazy:Lazy Stream :a))
+    (define mempty (make)))
 
-  (define-instance (iter:IntoIterator (Stream :a) :a)
+  (define-instance (iter:IntoIterator (lazy:Lazy Stream :a) :a)
     (define (iter:into-iter s)
       (let cell = (cell:new s))
       (iter:new (fn ((Unit))
-                  (match (force (cell:read cell))
-                    ((None) None)
-                    ((Some (Tuple h t))
+                  (match (lazy:force (cell:read cell))
+                    ((Nil) None)
+                    ((Cons h t)
                      (cell:write! cell t)
                      (Some h)))))))
 
-  (define-instance (iter:FromIterator (Stream :a) :a)
+  (define-instance (iter:FromIterator (lazy:Lazy Stream :a) :a)
     (define (iter:collect! iter)
       (into (the (List :a) (iter:collect! iter))))))
